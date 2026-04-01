@@ -12,6 +12,9 @@ final class AudioRecorder {
     private let channels: AVAudioChannelCount = 1
 
     func startRecording() throws -> URL {
+        // Pulisci eventuale stato precedente rimasto
+        stopAndRelease()
+
         let engine = AVAudioEngine()
         let inputNode = engine.inputNode
 
@@ -26,17 +29,23 @@ final class AudioRecorder {
             interleaved: true
         )!
 
-        let file = try AVAudioFile(
-            forWriting: url,
-            settings: recordingFormat.settings,
-            commonFormat: .pcmFormatInt16,
-            interleaved: true
-        )
+        let file: AVAudioFile
+        do {
+            file = try AVAudioFile(
+                forWriting: url,
+                settings: recordingFormat.settings,
+                commonFormat: .pcmFormatInt16,
+                interleaved: true
+            )
+        } catch {
+            try? FileManager.default.removeItem(at: url)
+            throw error
+        }
 
         let inputFormat = inputNode.outputFormat(forBus: 0)
 
-        // Converter dal formato del microfono al formato richiesto da whisper
         guard let converter = AVAudioConverter(from: inputFormat, to: recordingFormat) else {
+            try? FileManager.default.removeItem(at: url)
             throw AudioRecorderError.converterCreationFailed
         }
 
@@ -64,7 +73,13 @@ final class AudioRecorder {
             }
         }
 
-        try engine.start()
+        do {
+            try engine.start()
+        } catch {
+            inputNode.removeTap(onBus: 0)
+            try? FileManager.default.removeItem(at: url)
+            throw error
+        }
 
         self.audioEngine = engine
         self.audioFile = file
@@ -76,13 +91,7 @@ final class AudioRecorder {
 
     func stopRecording() -> URL? {
         guard isRecording else { return nil }
-
-        isRecording = false
-        audioEngine?.inputNode.removeTap(onBus: 0)
-        audioEngine?.stop()
-        audioEngine = nil
-        audioFile = nil
-
+        stopAndRelease()
         return recordingURL
     }
 
@@ -91,6 +100,17 @@ final class AudioRecorder {
             try? FileManager.default.removeItem(at: url)
             recordingURL = nil
         }
+    }
+
+    /// Ferma engine, rimuovi tap, rilascia risorse audio.
+    private func stopAndRelease() {
+        isRecording = false
+        if let engine = audioEngine {
+            engine.inputNode.removeTap(onBus: 0)
+            engine.stop()
+        }
+        audioEngine = nil
+        audioFile = nil
     }
 }
 

@@ -5,13 +5,15 @@ private let logger = Logger(subsystem: "com.voceink.app", category: "Transcriber
 
 final class Transcriber {
     private let settings: SettingsManager
+    private var currentProcess: Process?
+    private let timeoutSeconds: Double = 120
 
     init(settings: SettingsManager) {
         self.settings = settings
     }
 
     /// Trascrive un file audio WAV usando whisper-cli.
-    /// Ritorna il testo raw trascritto.
+    /// Ritorna il testo raw trascritto. Timeout dopo 120s.
     func transcribe(audioURL: URL) async throws -> String {
         let whisperPath = settings.whisperCLIPath
         let modelPath = settings.modelPath
@@ -44,31 +46,63 @@ final class Transcriber {
         process.standardOutput = stdoutPipe
         process.standardError = stderrPipe
 
-        return try await withCheckedThrowingContinuation { continuation in
-            process.terminationHandler = { proc in
-                let outputData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
-                let output = String(data: outputData, encoding: .utf8) ?? ""
+        currentProcess = process
 
-                if proc.terminationStatus != 0 {
-                    let errorData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-                    let errorOutput = String(data: errorData, encoding: .utf8) ?? ""
-                    continuation.resume(
-                        throwing: TranscriberError.processFailed(
-                            code: proc.terminationStatus,
-                            stderr: errorOutput
-                        ))
-                    return
+        // Timeout: termina il processo se impiega troppo
+        let timeoutTask = Task { [weak self, timeoutSeconds] in
+            try await Task.sleep(nanoseconds: UInt64(timeoutSeconds * 1_000_000_000))
+            if let proc = self?.currentProcess, proc.isRunning {
+                logger.warning("Timeout raggiunto (\(timeoutSeconds)s), terminazione processo whisper-cli")
+                proc.terminate()
+            }
+        }
+
+        defer {
+            timeoutTask.cancel()
+            currentProcess = nil
+        }
+
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                process.terminationHandler = { proc in
+                    let outputData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+                    let output = String(data: outputData, encoding: .utf8) ?? ""
+
+                    if proc.terminationStatus != 0 {
+                        let errorData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+                        let errorOutput = String(data: errorData, encoding: .utf8) ?? ""
+                        continuation.resume(
+                            throwing: TranscriberError.processFailed(
+                                code: proc.terminationStatus,
+                                stderr: errorOutput
+                            ))
+                        return
+                    }
+
+                    let text = Self.parseOutput(output)
+                    continuation.resume(returning: text)
                 }
 
-                let text = Self.parseOutput(output)
-                continuation.resume(returning: text)
+                do {
+                    try process.run()
+                } catch {
+                    continuation.resume(throwing: TranscriberError.launchFailed(error))
+                }
             }
+        } onCancel: {
+            // Se il Task viene cancellato (es. app chiusa), termina il processo
+            if process.isRunning {
+                logger.info("Task cancellato, terminazione processo whisper-cli")
+                process.terminate()
+            }
+        }
+    }
 
-            do {
-                try process.run()
-            } catch {
-                continuation.resume(throwing: TranscriberError.launchFailed(error))
-            }
+    /// Termina il processo in corso (se presente).
+    func cancel() {
+        if let process = currentProcess, process.isRunning {
+            process.terminate()
+            currentProcess = nil
         }
     }
 
@@ -97,6 +131,7 @@ enum TranscriberError: LocalizedError {
     case modelNotFound(String)
     case processFailed(code: Int32, stderr: String)
     case launchFailed(Error)
+    case timeout
 
     var errorDescription: String? {
         switch self {
@@ -108,6 +143,8 @@ enum TranscriberError: LocalizedError {
             return "whisper-cli terminato con codice \(code): \(stderr)"
         case .launchFailed(let error):
             return "Impossibile avviare whisper-cli: \(error.localizedDescription)"
+        case .timeout:
+            return "Trascrizione interrotta: timeout raggiunto."
         }
     }
 }

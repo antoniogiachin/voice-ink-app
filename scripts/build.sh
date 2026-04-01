@@ -25,7 +25,15 @@ mkdir -p "$APP_BUNDLE/Contents/Resources"
 cp "$BINARY" "$APP_BUNDLE/Contents/MacOS/$APP_NAME"
 cp "$PROJECT_DIR/resources/Info.plist" "$APP_BUNDLE/Contents/"
 
-# 3. Copia whisper-cli e modello dentro il bundle (opzionale, per portabilità)
+# 3. Genera e copia icona app
+"$SCRIPT_DIR/generate-icon.sh"
+ICON_PATH="$PROJECT_DIR/resources/AppIcon.icns"
+if [ -f "$ICON_PATH" ]; then
+    cp "$ICON_PATH" "$APP_BUNDLE/Contents/Resources/AppIcon.icns"
+    echo "[ok] Icona app copiata nel bundle"
+fi
+
+# 4. Copia whisper-cli e modello dentro il bundle (opzionale, per portabilità)
 WHISPER_CLI="$PROJECT_DIR/whisper.cpp/build/bin/whisper-cli"
 MODEL_PATH="$PROJECT_DIR/models/ggml-medium.bin"
 

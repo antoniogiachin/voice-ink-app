@@ -9,8 +9,10 @@ struct VoceInkApp: App {
         MenuBarExtra {
             MenuBarView(appState: appState)
         } label: {
-            Image(systemName: appState.status.iconName)
-                .symbolRenderingMode(.hierarchical)
+            let icon = appState.status == .recording
+                ? AppIcon.menuBarRecordingIcon()
+                : AppIcon.menuBarIcon()
+            Image(nsImage: icon)
         }
 
         Window("Impostazioni VoceInk", id: "settings") {

@@ -33,13 +33,17 @@ enum AppStatus: Equatable {
 final class AppState: ObservableObject {
     @Published var status: AppStatus = .idle
     @Published var lastTranscription: String = ""
+    @Published var recordingDuration: TimeInterval = 0
 
     var settings = SettingsManager()
     let recorder = AudioRecorder()
     private lazy var transcriber = Transcriber(settings: settings)
     private let hotKeyManager = HotKeyManager()
+    private let overlayController = OverlayWindowController()
 
     private var recordingURL: URL?
+    private var recordingTimer: Timer?
+    private var transcriptionTask: Task<Void, Never>?
 
     func setup() {
         hotKeyManager.register { [weak self] in
@@ -56,7 +60,7 @@ final class AppState: ObservableObject {
         case .idle, .pasted, .error:
             startRecording()
         case .transcribing:
-            break  // Ignora durante trascrizione
+            break
         }
     }
 
@@ -65,13 +69,30 @@ final class AppState: ObservableObject {
             let url = try recorder.startRecording()
             recordingURL = url
             status = .recording
+
+            // Avvia timer durata — DOPO che la registrazione è partita con successo
+            recordingDuration = 0
+            recordingTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+                DispatchQueue.main.async {
+                    self?.recordingDuration += 1
+                }
+            }
+
+            // Mostra overlay
+            overlayController.show(appState: self)
         } catch {
+            // Se fallisce, pulisci tutto quello che potrebbe essere rimasto
+            stopRecordingTimerAndOverlay()
+            recorder.cleanup()
             status = .error(error.localizedDescription)
             resetAfterDelay()
         }
     }
 
     private func stopAndTranscribe() {
+        // Ferma timer e overlay immediatamente
+        stopRecordingTimerAndOverlay()
+
         guard let url = recorder.stopRecording() else {
             status = .error("Nessuna registrazione attiva")
             resetAfterDelay()
@@ -80,37 +101,53 @@ final class AppState: ObservableObject {
 
         status = .transcribing
 
-        Task {
-            do {
-                let rawText = try await transcriber.transcribe(audioURL: url)
-                let processed = TextProcessor.process(rawText, mode: settings.outputMode)
+        transcriptionTask = Task { [weak self] in
+            guard let self else { return }
 
-                recorder.cleanup()
+            defer {
+                // Cleanup SEMPRE eseguito, anche se il Task viene cancellato
+                self.recorder.cleanup()
+            }
+
+            do {
+                let rawText = try await self.transcriber.transcribe(audioURL: url)
+
+                // Verifica cancellazione dopo l'await
+                guard !Task.isCancelled else { return }
+
+                let processed = TextProcessor.process(rawText, mode: self.settings.outputMode)
 
                 if processed.isEmpty {
-                    status = .error("Nessun testo riconosciuto")
-                    resetAfterDelay()
+                    self.status = .error("Nessun testo riconosciuto")
+                    self.resetAfterDelay()
                     return
                 }
 
-                lastTranscription = processed
+                self.lastTranscription = processed
                 let result = await TextInserter.insert(processed)
 
                 switch result {
                 case .pasted:
-                    status = .pasted
+                    self.status = .pasted
                 case .copiedOnly(let reason):
-                    status = .pasted
+                    self.status = .pasted
                     print("[VoceInk] Fallback copy-only: \(reason)")
                 }
 
-                resetAfterDelay()
+                self.resetAfterDelay()
             } catch {
-                recorder.cleanup()
-                status = .error(error.localizedDescription)
-                resetAfterDelay()
+                guard !Task.isCancelled else { return }
+                self.status = .error(error.localizedDescription)
+                self.resetAfterDelay()
             }
         }
+    }
+
+    /// Ferma timer registrazione e nascondi overlay. Chiamato su ogni uscita dalla registrazione.
+    private func stopRecordingTimerAndOverlay() {
+        recordingTimer?.invalidate()
+        recordingTimer = nil
+        overlayController.hide()
     }
 
     private func resetAfterDelay() {
