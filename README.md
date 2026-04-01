@@ -1,97 +1,102 @@
 # VoceInk
 
-App menu bar per macOS Apple Silicon: registra audio dal microfono, trascrive in italiano con whisper.cpp (100% locale), post-processa il testo e lo inserisce nel campo attivo del terminale.
+**Dettatura vocale locale per sviluppatori su macOS.**
+
+VoceInk e un'app menu bar per macOS Apple Silicon che trasforma la tua voce in testo direttamente nel terminale. Usa [whisper.cpp](https://github.com/ggerganov/whisper.cpp) per la trascrizione, gira interamente sul tuo Mac e non invia nulla a nessun server.
+
+Pensata per chi lavora con Codex, Claude CLI o qualunque tool a riga di comando e vuole dettare prompt, comandi e istruzioni senza toccare la tastiera.
 
 **Zero cloud. Zero telemetria. Zero upload audio.**
+
+---
+
+## Come funziona
+
+```
+ Premi hotkey  →  Parla in italiano  →  Premi hotkey  →  Testo nel terminale
+   (Ctrl+Shift+Space)                    (stop + trascrivi)
+```
+
+1. Premi **Ctrl + Shift + Space**: VoceInk inizia a registrare dal microfono (l'icona nella menu bar diventa rossa)
+2. Parla in italiano — descrivi un prompt, detta un comando, spiega cosa vuoi fare
+3. Premi di nuovo **Ctrl + Shift + Space**: la registrazione si ferma, whisper.cpp trascrive l'audio localmente
+4. Il testo trascritto e pulito viene inserito automaticamente nel campo attivo del terminale
+
+Tutto avviene sul tuo Mac. L'audio viene eliminato subito dopo la trascrizione.
+
+---
+
+## Perche VoceInk
+
+- **100% locale**: nessun servizio cloud, nessuna API esterna, nessun account da creare
+- **Ottimizzata per sviluppatori**: preserva path, nomi file, comandi shell, branch git, stack trace e token tecnici durante il post-processing
+- **Due modalita di output**:
+  - *Libero*: corregge solo punteggiatura e maiuscole, preserva il contenuto originale
+  - *Prompt Codex*: rimuove filler ("ehm", "tipo", "cioe"), rende il testo piu chiaro e operativo per prompt di sviluppo
+- **Integrazione terminale**: inserisce il testo direttamente dove stai lavorando (Terminal.app, iTerm2)
+- **Privacy first**: nessuna telemetria, nessun analytics, audio cancellato subito
+
+---
+
+## Cosa preserva
+
+Quando parli di codice, VoceInk riconosce e protegge automaticamente:
+
+| Tipo | Esempio |
+|------|---------|
+| Path Unix | `/usr/bin/swift`, `~/Developer/progetto` |
+| URL | `https://github.com/user/repo` |
+| Nomi file | `package.json`, `main.swift`, `Dockerfile` |
+| camelCase / PascalCase | `getUserName`, `AppDelegate` |
+| snake_case | `user_name`, `MAX_RETRIES` |
+| kebab-case | `my-component`, `feature-branch` |
+| Backtick code | `` `git status` ``, `` `npm install` `` |
+| Stack trace | `at Module.func (file:line)` |
+
+---
 
 ## Requisiti
 
 - macOS 14+ (Sonoma o successivo)
 - Apple Silicon (M1/M2/M3/M4)
-- Xcode Command Line Tools (`xcode-select --install`)
-- Homebrew con `cmake` (`brew install cmake`)
-- ~2 GB di spazio disco (whisper.cpp + modello medium)
+- Xcode Command Line Tools
+- cmake (via Homebrew)
+- ~2 GB di spazio disco
 
-## Setup
+## Quick Start
 
 ```bash
-# 1. Clona whisper.cpp, compila e scarica il modello medium (~1.5 GB)
-./scripts/setup.sh
-
-# 2. Compila VoceInk e crea il bundle .app
-./scripts/build.sh
-
-# 3. Avvia
+git clone https://github.com/antoniogiachin/voice-ink-app.git
+cd voice-ink-app
+./scripts/setup.sh    # compila whisper.cpp + scarica modello (~1.5 GB)
+./scripts/build.sh    # compila VoceInk
 open build/VoceInk.app
 ```
 
-### Permessi richiesti al primo avvio
+Per la guida dettagliata passo-passo, permessi macOS e troubleshooting: **[SETUP.md](SETUP.md)**
 
-- **Microfono**: System Settings > Privacy & Security > Microphone > VoceInk
-- **Accessibilita**: System Settings > Privacy & Security > Accessibility > VoceInk
-  (necessario per il paste automatico nel terminale)
+---
 
-## Utilizzo
+## Architettura
 
-1. Avvia VoceInk: appare un'icona microfono nella menu bar
-2. Premi **Ctrl + Shift + Space** per iniziare a registrare (icona rossa)
-3. Parla in italiano
-4. Premi **Ctrl + Shift + Space** di nuovo per fermare e trascrivere
-5. Il testo trascritto viene inserito automaticamente nel campo attivo
-
-### Modalita di output
-
-| Modalita | Descrizione |
-|----------|-------------|
-| **Libero** (default) | Corregge punteggiatura, maiuscole e refusi evidenti. Preserva il contenuto originale. |
-| **Prompt Codex** | Come Libero + rimuove filler ("ehm", "tipo", "cioe"), rende il testo piu operativo per prompt di sviluppo. |
-
-Cambia modalita dal menu dropdown nella menu bar o dalle Impostazioni.
-
-### Token tecnici preservati
-
-In entrambe le modalita, VoceInk preserva automaticamente:
-- Path Unix (`/usr/bin/swift`, `~/Developer/progetto`)
-- URL (`https://github.com/...`)
-- Nomi file (`package.json`, `main.swift`)
-- Identificatori codice: camelCase, PascalCase, snake_case, SCREAMING_SNAKE_CASE, kebab-case
-- Testo tra backtick (\`git status\`)
-- Stack trace
-
-## Configurazione
-
-Apri le impostazioni dalla menu bar (o Cmd+,):
-
-- **Modalita output**: Libero / Prompt Codex
-- **Modello Whisper**: seleziona tra i modelli .bin disponibili nella cartella `models/`
-- **Path whisper-cli**: override del percorso di whisper-cli
-- **Hotkey**: default Ctrl+Shift+Space
-
-### Modelli alternativi
-
-Per scaricare modelli diversi:
-
-```bash
-# Small (~500 MB, piu veloce ma meno preciso)
-curl -L https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin -o models/ggml-small.bin
-
-# Large v3 (~3 GB, massima qualita)
-curl -L https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3.bin -o models/ggml-large-v3.bin
 ```
-
-Poi seleziona il modello dalle impostazioni.
-
-## Sviluppo
-
-```bash
-# Build debug
-swift build
-
-# Esegui test
-swift test
-
-# Build release
-swift build -c release
+┌─────────────────────────────────────┐
+│       VoceInk (Menu Bar App)        │
+│       SwiftUI · MenuBarExtra        │
+├──────────┬──────────┬───────────────┤
+│ HotKey   │ Audio    │  Settings     │
+│ Manager  │ Recorder │  Manager      │
+│ (Carbon) │(AVFound.)│ (UserDefaults)│
+├──────────┴──────────┴───────────────┤
+│          Transcriber                │
+│    whisper.cpp CLI (subprocess)     │
+├─────────────────────────────────────┤
+│        TextProcessor                │
+│   libero / prompt-codex (italiano)  │
+├─────────────────────────────────────┤
+│         TextInserter                │
+│   CGEvent Cmd+V / fallback clipboard│
+└─────────────────────────────────────┘
 ```
 
 ### Struttura del progetto
@@ -100,47 +105,67 @@ swift build -c release
 Sources/VoceInk/
   VoceInkApp.swift       # Entry point, MenuBarExtra UI
   AppState.swift          # Stato globale, orchestrazione flusso
-  AudioRecorder.swift     # Registrazione audio AVFoundation (16kHz mono WAV)
-  Transcriber.swift       # Integrazione whisper-cli (subprocess)
-  TextProcessor.swift     # Post-processing italiano (libero + prompt-codex)
-  TextInserter.swift      # Paste automatico via CGEvent + fallback clipboard
-  HotKeyManager.swift     # Hotkey globale via Carbon API
-  SettingsManager.swift   # Persistenza impostazioni (UserDefaults)
-  SettingsView.swift      # Finestra impostazioni SwiftUI
+  AudioRecorder.swift     # Registrazione audio (16kHz mono WAV)
+  Transcriber.swift       # Integrazione whisper-cli
+  TextProcessor.swift     # Post-processing italiano
+  TextInserter.swift      # Paste automatico + fallback
+  HotKeyManager.swift     # Hotkey globale (Carbon API)
+  SettingsManager.swift   # Persistenza impostazioni
+  SettingsView.swift      # Finestra impostazioni
+
+Tests/VoceInkTests/       # 28 test unitari
+scripts/                  # Setup e build automation
 ```
 
-## Terminali supportati
+---
 
-- Terminal.app
-- iTerm2
+## Configurazione
 
-Entrambi supportano Cmd+V per il paste. Se il paste automatico fallisce (es. permesso Accessibility mancante), il testo resta nella clipboard per incollarlo manualmente.
+Dall'icona nella menu bar o dalle Impostazioni (Cmd+,):
+
+- **Modalita output**: Libero / Prompt Codex
+- **Modello Whisper**: small (~500 MB), medium (~1.5 GB, default), large-v3 (~3 GB)
+- **Hotkey**: default Ctrl+Shift+Space
+- **Path whisper-cli**: override personalizzabile
+
+---
+
+## Sviluppo
+
+```bash
+swift build        # build debug
+swift test         # esegui 28 test unitari
+swift build -c release
+```
+
+---
 
 ## Limiti noti
 
-- **Prima trascrizione lenta**: il modello viene caricato in memoria al primo uso (~5-10s con medium)
-- **No streaming**: la trascrizione avviene dopo aver fermato la registrazione, non in tempo reale
-- **Terminologia tecnica**: il modello medium e buono ma non perfetto su gergo tecnico molto specifico. Il modello large-v3 e migliore
-- **Post-processing rule-based**: corregge pattern comuni ma non errori semantici complessi
-- **Accessibility obbligatoria**: senza il permesso Accessibility, il paste automatico non funziona (fallback: clipboard)
+- La prima trascrizione e piu lenta (~5-10s) perche il modello viene caricato in memoria
+- Nessun supporto streaming: la trascrizione avviene dopo aver fermato la registrazione
+- Il modello medium e buono ma non perfetto su terminologia tecnica molto specifica
+- Il post-processing e rule-based: corregge pattern comuni, non errori semantici complessi
+- Il paste automatico richiede il permesso Accessibility
 
-## Prossimi miglioramenti
+## Roadmap
 
-- [ ] Feedback audio/visivo durante la registrazione (timer, livello audio)
-- [ ] Supporto per modelli CoreML (trascrizione piu veloce)
+- [ ] Feedback visivo durante la registrazione (timer, livello audio)
+- [ ] Modelli CoreML per trascrizione piu veloce
 - [ ] Shortcut personalizzabile con recorder visuale
-- [ ] Supporto multilingue (rileva lingua automaticamente)
-- [ ] Modalita streaming con trascrizione in tempo reale
-- [ ] Integrazione diretta con whisper.cpp come libreria C (no subprocess)
+- [ ] Rilevamento automatico della lingua
+- [ ] Streaming / trascrizione in tempo reale
+- [ ] Integrazione whisper.cpp come libreria C (no subprocess)
+
+---
 
 ## Privacy
 
-VoceInk e progettata con la privacy come priorita:
 - Tutto il processing avviene localmente sul tuo Mac
 - L'audio registrato viene eliminato subito dopo la trascrizione
 - Nessun dato viene inviato a server esterni
 - Nessuna telemetria o analytics
-- Il codice sorgente e interamente ispezionabile
+- Codice sorgente interamente ispezionabile
 
 ## Licenza
 
