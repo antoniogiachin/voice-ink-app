@@ -94,7 +94,7 @@ final class AppState: ObservableObject {
                 }
 
                 lastTranscription = processed
-                let result = TextInserter.insert(processed)
+                let result = await TextInserter.insert(processed)
 
                 switch result {
                 case .pasted:

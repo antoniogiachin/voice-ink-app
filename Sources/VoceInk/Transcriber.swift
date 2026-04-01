@@ -1,4 +1,7 @@
 import Foundation
+import os
+
+private let logger = Logger(subsystem: "com.voceink.app", category: "Transcriber")
 
 final class Transcriber {
     private let settings: SettingsManager
@@ -13,11 +16,15 @@ final class Transcriber {
         let whisperPath = settings.whisperCLIPath
         let modelPath = settings.modelPath
 
-        // Verifica che whisper-cli esista
-        guard FileManager.default.isExecutableFile(atPath: whisperPath) else {
+        logger.info("whisper-cli path: \(whisperPath)")
+        logger.info("model path: \(modelPath)")
+
+        guard FileManager.default.fileExists(atPath: whisperPath) else {
+            logger.error("whisper-cli NOT FOUND at: \(whisperPath)")
             throw TranscriberError.whisperNotFound(whisperPath)
         }
         guard FileManager.default.fileExists(atPath: modelPath) else {
+            logger.error("model NOT FOUND at: \(modelPath)")
             throw TranscriberError.modelNotFound(modelPath)
         }
 
@@ -65,14 +72,23 @@ final class Transcriber {
         }
     }
 
-    /// Parse dell'output di whisper-cli: rimuove righe vuote, whitespace extra
+    /// Parse dell'output di whisper-cli: rimuove righe vuote, whitespace extra e token speciali
     static func parseOutput(_ raw: String) -> String {
-        raw
+        var result = raw
             .components(separatedBy: .newlines)
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
             .joined(separator: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Rimuovi token speciali di whisper (es. [_EOT_], [_BEG_], [_SOT_], [BLANK_AUDIO])
+        result = result.replacingOccurrences(
+            of: "\\[_?[A-Z_]+_?\\]",
+            with: "",
+            options: .regularExpression
+        )
+
+        return result.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 

@@ -42,25 +42,33 @@ final class SettingsManager: ObservableObject {
     // MARK: - Init
 
     init() {
-        // Calcola path di default relativi all'app bundle o alla directory di lavoro
-        let bundlePath = Bundle.main.bundlePath
-        let appDir: String
-        if bundlePath.hasSuffix(".app") {
-            // Dentro un .app bundle
-            appDir =
-                URL(fileURLWithPath: bundlePath)
-                .deletingLastPathComponent()
-                .deletingLastPathComponent()
-                .path
-        } else {
-            // Sviluppo: usa la directory corrente
-            appDir = FileManager.default.currentDirectoryPath
-        }
+        let defaultWhisperPath: String
+        let defaultModelPath: String
 
-        let defaultWhisperPath =
-            (appDir as NSString).appendingPathComponent("whisper.cpp/build/bin/whisper-cli")
-        let defaultModelPath =
-            (appDir as NSString).appendingPathComponent("models/ggml-medium.bin")
+        // 1. Cerca dentro il bundle (Contents/Resources/) — build.sh li copia lì
+        let bundleResources = Bundle.main.resourceURL?.path ?? ""
+        let bundleWhisper = (bundleResources as NSString).appendingPathComponent("whisper-cli")
+        let bundleModel = (bundleResources as NSString).appendingPathComponent("ggml-medium.bin")
+
+        if FileManager.default.fileExists(atPath: bundleWhisper) {
+            defaultWhisperPath = bundleWhisper
+            defaultModelPath = bundleModel
+        } else {
+            // 2. Cerca risalendo dal bundle fino alla root del progetto
+            var candidate = URL(fileURLWithPath: Bundle.main.bundlePath)
+            var projectDir: String? = nil
+            for _ in 0..<5 {
+                candidate = candidate.deletingLastPathComponent()
+                let check = candidate.appendingPathComponent("whisper.cpp/build/bin/whisper-cli").path
+                if FileManager.default.fileExists(atPath: check) {
+                    projectDir = candidate.path
+                    break
+                }
+            }
+            let base = projectDir ?? FileManager.default.currentDirectoryPath
+            defaultWhisperPath = (base as NSString).appendingPathComponent("whisper.cpp/build/bin/whisper-cli")
+            defaultModelPath = (base as NSString).appendingPathComponent("models/ggml-medium.bin")
+        }
 
         // Carica da UserDefaults con fallback ai default
         let storedKeyCode = UInt32(defaults.integer(forKey: Keys.hotKeyCode))
