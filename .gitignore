@@ -1,0 +1,9 @@
+.build/
+build/
+.swiftpm/
+whisper.cpp/
+models/
+*.o
+*.d
+.DS_Store
+xcuserdata/
