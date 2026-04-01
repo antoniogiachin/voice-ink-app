@@ -44,8 +44,11 @@ final class AppState: ObservableObject {
     private var recordingURL: URL?
     private var recordingTimer: Timer?
     private var transcriptionTask: Task<Void, Never>?
+    private var isSetUp = false
 
     func setup() {
+        guard !isSetUp else { return }
+        isSetUp = true
         hotKeyManager.register { [weak self] in
             DispatchQueue.main.async {
                 self?.toggleRecording()

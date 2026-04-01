@@ -13,6 +13,9 @@ struct VoceInkApp: App {
                 ? AppIcon.menuBarRecordingIcon()
                 : AppIcon.menuBarIcon()
             Image(nsImage: icon)
+                .task {
+                    appState.setup()
+                }
         }
 
         Window("Impostazioni VoceInk", id: "settings") {
@@ -79,9 +82,6 @@ struct MenuBarView: View {
             .keyboardShortcut("q", modifiers: .command)
         }
         .padding(4)
-        .onAppear {
-            appState.setup()
-        }
     }
 
     private var statusColor: Color {
